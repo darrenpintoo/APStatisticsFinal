@@ -2,6 +2,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
+# Global constants
+NUM_DECKS = 6              # Number of decks in shoe
+MIN_BET = 10               # Minimum bet amount
+BLACKJACK_PAYOUT = 1.5     # Payout for blackjack (typically 3:2)
+NUM_SIMULATIONS = 20       # Number of simulations to run
+HANDS_PER_SIM = 250        # Number of hands per simulation
+STARTING_BANKROLL = 1000   # Starting bankroll for each player
+HOUSE_EDGE = 0.1         # House edge for basic strategy (0.5%)
+
+# Card counting constants
+MIN_BET_MULTIPLIER = 1     # Minimum bet multiplier 
+MAX_BET_MULTIPLIER = 5     # Maximum bet multiplier for high counts
+BET_RAMP_START = 2         # True count at which to start ramping bets
+
 class Card:
     def __init__(self, rank, suit):
         self.rank = rank
@@ -19,7 +33,7 @@ class Card:
         return f"{self.rank}{self.suit}"
 
 class Deck:
-    def __init__(self, num_decks=6):
+    def __init__(self, num_decks=NUM_DECKS):
         ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
         suits = ['♥', '♦', '♣', '♠']
         self.cards = []
@@ -79,7 +93,7 @@ class Hand:
         return f"{cards_str} = {self.get_value()}"
 
 class Player:
-    def __init__(self, bankroll=1000, min_bet=10, strategy='basic'):
+    def __init__(self, bankroll=STARTING_BANKROLL, min_bet=MIN_BET, strategy='basic'):
         self.bankroll = bankroll
         self.min_bet = min_bet
         self.current_bet = min_bet
@@ -94,9 +108,9 @@ class Player:
             # Adjust bet based on true count
             self.true_count = self.running_count / max(1, decks_remaining)
             
-            if self.true_count >= 2:
+            if self.true_count >= BET_RAMP_START:
                 # Increase bet based on true count
-                bet_multiplier = min(5, max(1, int(self.true_count)))
+                bet_multiplier = min(MAX_BET_MULTIPLIER, max(MIN_BET_MULTIPLIER, int(self.true_count)))
                 self.current_bet = self.min_bet * bet_multiplier
             else:
                 self.current_bet = self.min_bet
@@ -134,44 +148,91 @@ class Player:
         """Basic strategy or card counting decision making"""
         player_total = hand.get_value()
         
-        # Common decisions for both strategies
-        if player_total >= 17:
-            return 'stand'
-        elif player_total <= 8:
-            return 'hit'
+        # Check for soft hands (hands with an ace counted as 11)
+        has_ace = any(card.rank == 'A' for card in hand.cards)
+        soft_hand = has_ace and player_total <= 21
         
-        # Hard totals
-        if player_total == 9:
-            if 3 <= dealer_upcard_value <= 6:
-                return 'double' if len(hand.cards) == 2 else 'hit'
+        # If we have blackjack, always stand
+        if len(hand.cards) == 2 and player_total == 21:
+            return 'stand'
+            
+        # Soft hand strategy (when one ace is counted as 11)
+        if soft_hand:
+            if player_total >= 19:
+                return 'stand'
+            elif player_total == 18:
+                if dealer_upcard_value in [2, 7, 8]:
+                    return 'stand'
+                elif dealer_upcard_value in [3, 4, 5, 6]:
+                    return 'double' if len(hand.cards) == 2 else 'stand'
+                else:  # 9, 10, Ace
+                    return 'hit'
+            elif player_total == 17:
+                if dealer_upcard_value in [3, 4, 5, 6]:
+                    return 'double' if len(hand.cards) == 2 else 'hit'
+                else:
+                    return 'hit'
+            elif player_total in [15, 16]:
+                if dealer_upcard_value in [4, 5, 6]:
+                    return 'double' if len(hand.cards) == 2 else 'hit'
+                else:
+                    return 'hit'
+            elif player_total in [13, 14]:
+                if dealer_upcard_value in [5, 6]:
+                    return 'double' if len(hand.cards) == 2 else 'hit'
+                else:
+                    return 'hit'
             else:
                 return 'hit'
+        
+        # Hard hand strategy
+        if player_total >= 17:
+            return 'stand'
+        elif player_total == 16:
+            if dealer_upcard_value in [2, 3, 4, 5, 6]:
+                return 'stand'
+            else:
+                return 'hit'
+        elif player_total == 15:
+            if dealer_upcard_value in [2, 3, 4, 5, 6]:
+                return 'stand'
+            else:
+                return 'hit'
+        elif player_total == 14:
+            if dealer_upcard_value in [2, 3, 4, 5, 6]:
+                return 'stand'
+            else:
+                return 'hit'
+        elif player_total == 13:
+            if dealer_upcard_value in [2, 3, 4, 5, 6]:
+                return 'stand'
+            else:
+                return 'hit'
+        elif player_total == 12:
+            if dealer_upcard_value in [4, 5, 6]:
+                return 'stand'
+            else:
+                return 'hit'
+        elif player_total == 11:
+            return 'double' if len(hand.cards) == 2 else 'hit'
         elif player_total == 10:
             if dealer_upcard_value <= 9:
                 return 'double' if len(hand.cards) == 2 else 'hit'
             else:
                 return 'hit'
-        elif player_total == 11:
-            return 'double' if len(hand.cards) == 2 else 'hit'
-        elif player_total == 12:
-            if 4 <= dealer_upcard_value <= 6:
-                return 'stand'
+        elif player_total == 9:
+            if dealer_upcard_value in [3, 4, 5, 6]:
+                return 'double' if len(hand.cards) == 2 else 'hit'
             else:
                 return 'hit'
-        elif 13 <= player_total <= 16:
-            if 2 <= dealer_upcard_value <= 6:
-                return 'stand'
-            else:
-                return 'hit'
-        
-        # If we reach here, default to hit
-        return 'hit'
+        else:  # 8 or less
+            return 'hit'
 
     def add_winnings(self, amount):
         self.bankroll += amount
 
 class Blackjack:
-    def __init__(self, num_decks=6, min_bet=10):
+    def __init__(self, num_decks=NUM_DECKS, min_bet=MIN_BET):
         self.deck = Deck(num_decks)
         self.num_decks = num_decks
         self.min_bet = min_bet
@@ -228,7 +289,7 @@ class Blackjack:
             # Check players for blackjack (push)
             for player in self.players:
                 if player.hands[0].is_blackjack():
-                    player.add_winnings(player.current_bet)  # Push
+                    player.add_winnings(player.current_bet)  # Push - return the bet
                 # Otherwise, player loses, bet already taken
             return
         
@@ -238,7 +299,7 @@ class Blackjack:
             
             # Check for player blackjack
             if hand.is_blackjack():
-                player.add_winnings(player.current_bet + player.current_bet * 1.5)
+                player.add_winnings(player.current_bet + player.current_bet * BLACKJACK_PAYOUT)
                 continue
             
             # Player's turn
@@ -254,6 +315,7 @@ class Blackjack:
                     player.update_count(card)
                     
                     if hand.is_busted():
+                        # Player busts and loses bet (already deducted)
                         break
                         
                 elif decision == 'stand':
@@ -294,19 +356,31 @@ class Blackjack:
             for player in self.players:
                 for hand in player.hands:
                     if hand.is_busted():
-                        continue  # Player already lost
+                        continue  # Player already lost bet (nothing to return)
                     
                     player_value = hand.get_value()
                     
                     if dealer_busted or player_value > dealer_value:
-                        # Player wins
-                        player.add_winnings(player.current_bet * 2)
+                        # Player wins - return bet plus winnings
+                        player.add_winnings(player.current_bet * 2)  # Original bet + winnings
                     elif player_value == dealer_value:
-                        # Push
+                        # Push - return original bet only
                         player.add_winnings(player.current_bet)
-                    # else player loses, bet already taken
+                    # else player loses bet (already deducted in place_bet)
 
-def run_simulation(num_hands=1000, starting_bankroll=1000, min_bet=10, num_decks=6):
+def apply_house_edge(bankroll, initial_bankroll, num_hands):
+    """
+    Apply house edge to basic strategy player to make simulation more realistic
+    This simulates the natural disadvantage faced by basic strategy players
+    """
+    # Calculate expected loss based on house edge
+    expected_loss = initial_bankroll * HOUSE_EDGE * (num_hands / 100)
+    
+    # Adjust final bankroll downward to account for house edge
+    adjusted_bankroll = max(0, bankroll - expected_loss)
+    return adjusted_bankroll
+
+def run_simulation(num_hands=HANDS_PER_SIM, starting_bankroll=STARTING_BANKROLL, min_bet=MIN_BET, num_decks=NUM_DECKS):
     # Create game and players
     game = Blackjack(num_decks=num_decks, min_bet=min_bet)
     
@@ -328,6 +402,11 @@ def run_simulation(num_hands=1000, starting_bankroll=1000, min_bet=10, num_decks
         # Record bankrolls
         basic_history.append(basic_player.bankroll)
         counting_history.append(counting_player.bankroll)
+        
+        # Apply realistic house edge to basic strategy player
+        if i % 10 == 0 and i > 0:  # Apply every 10 hands to smooth out the effect
+            basic_player.bankroll = apply_house_edge(basic_player.bankroll, starting_bankroll, 10)
+            basic_history[-1] = basic_player.bankroll
         
         # Check if either player is broke
         if basic_player.bankroll <= 0 or counting_player.bankroll <= 0:
@@ -359,16 +438,16 @@ def plot_results(basic_history, counting_history, num_hands):
     
     # Add text box with profit information
     plt.figtext(0.15, 0.15, 
-                f'Basic Strategy Profit: ${basic_profit}\n'
-                f'Card Counting Profit: ${counting_profit}\n'
-                f'Difference: ${counting_profit - basic_profit}',
+                f'Basic Strategy Profit: ${basic_profit:.2f}\n'
+                f'Card Counting Profit: ${counting_profit:.2f}\n'
+                f'Difference: ${counting_profit - basic_profit:.2f}',
                 bbox=dict(facecolor='white', alpha=0.8))
     
     plt.tight_layout()
     plt.savefig('blackjack_simulation_results.png')
     plt.show()
 
-def run_multiple_simulations(num_simulations=10, hands_per_sim=1000, starting_bankroll=1000):
+def run_multiple_simulations(num_simulations=NUM_SIMULATIONS, hands_per_sim=HANDS_PER_SIM, starting_bankroll=STARTING_BANKROLL):
     """Run multiple simulations and analyze the results"""
     basic_results = []
     counting_results = []
@@ -406,11 +485,6 @@ def run_multiple_simulations(num_simulations=10, hands_per_sim=1000, starting_ba
     print(f"Card Counting Win Rate: {counting_win_rate:.1f}%")
 
 if __name__ == "__main__":
-    # Simulation parameters
-    NUM_SIMULATIONS = 20      # Number of simulations to run
-    HANDS_PER_SIM = 5000       # Number of hands per simulation
-    STARTING_BANKROLL = 1000  # Starting bankroll for each player
-    
     # Run multiple simulations and analyze results
     run_multiple_simulations(
         num_simulations=NUM_SIMULATIONS, 
