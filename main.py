@@ -9,7 +9,7 @@ BLACKJACK_PAYOUT = 1.5     # Payout for blackjack (typically 3:2)
 NUM_SIMULATIONS = 20       # Number of simulations to run
 HANDS_PER_SIM = 250        # Number of hands per simulation
 STARTING_BANKROLL = 1000   # Starting bankroll for each player
-HOUSE_EDGE = 0.1         # House edge for basic strategy (0.5%)
+HOUSE_EDGE = 0.05         # House edge for basic strategy (0.5%)
 
 # Card counting constants
 MIN_BET_MULTIPLIER = 1     # Minimum bet multiplier 
